@@ -157,7 +157,12 @@ func main() {
 	discord.AddHandler(guildMemberUpdate)
 	discord.AddHandler(connect)
 	discord.AddHandler(disconnect)
-	discord.Identify.Intents = discordgo.IntentsAll
+	// Only what is needed: guild/channel structure, voice states, and
+	// member info (nicknames, avatars). Server Members is a privileged
+	// intent and must be enabled in the Discord developer portal.
+	discord.Identify.Intents = discordgo.IntentsGuilds |
+		discordgo.IntentsGuildVoiceStates |
+		discordgo.IntentsGuildMembers
 
 	dgerr = discord.Open()
 	if dgerr != nil {
