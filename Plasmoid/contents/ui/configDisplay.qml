@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls as QQC2
+import QtQuick.Layouts
 import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
 
@@ -28,61 +29,65 @@ KCM.SimpleKCM {
             Kirigami.FormData.isSection: true
         }
 
-        QQC2.ButtonGroup { id: sortByGroup }
-
-        QQC2.RadioButton {
-            id: sortByNick
+        // Each radio group needs its own parent: RadioButtons are
+        // auto-exclusive with all their siblings, so groups sharing the
+        // FormLayout would uncheck each other when the settings load.
+        ColumnLayout {
             Kirigami.FormData.label: i18n("Sort users by:")
-            text: i18n("Nickname")
-            QQC2.ButtonGroup.group: sortByGroup
-        }
-        QQC2.RadioButton {
-            id: sortByUsername
-            text: i18n("Username")
-            QQC2.ButtonGroup.group: sortByGroup
-        }
-        QQC2.RadioButton {
-            id: sortById
-            text: i18n("User ID")
-            QQC2.ButtonGroup.group: sortByGroup
+            Kirigami.FormData.buddyFor: sortByNick
+            spacing: Kirigami.Units.smallSpacing
+
+            QQC2.RadioButton {
+                id: sortByNick
+                text: i18n("Nickname")
+            }
+            QQC2.RadioButton {
+                id: sortByUsername
+                text: i18n("Username")
+            }
+            QQC2.RadioButton {
+                id: sortById
+                text: i18n("User ID")
+            }
         }
 
         Item {
             Kirigami.FormData.isSection: true
         }
 
-        QQC2.ButtonGroup { id: sortDirectionGroup }
-
-        QQC2.RadioButton {
-            id: sortDirectionAscending
+        ColumnLayout {
             Kirigami.FormData.label: i18n("Sort direction:")
-            text: i18n("Ascending")
-            QQC2.ButtonGroup.group: sortDirectionGroup
-        }
-        QQC2.RadioButton {
-            id: sortDirectionDescending
-            text: i18n("Descending")
-            QQC2.ButtonGroup.group: sortDirectionGroup
+            Kirigami.FormData.buddyFor: sortDirectionAscending
+            spacing: Kirigami.Units.smallSpacing
+
+            QQC2.RadioButton {
+                id: sortDirectionAscending
+                text: i18n("Ascending")
+            }
+            QQC2.RadioButton {
+                id: sortDirectionDescending
+                text: i18n("Descending")
+            }
         }
 
         Item {
             Kirigami.FormData.isSection: true
         }
 
-        QQC2.ButtonGroup { id: sortStyleGroup }
-
-        QQC2.RadioButton {
-            id: sortStyleApp
+        ColumnLayout {
             Kirigami.FormData.label: i18n("Sort style:")
-            text: i18n("Discord app")
+            Kirigami.FormData.buddyFor: sortStyleApp
             enabled: !sortById.checked
-            QQC2.ButtonGroup.group: sortStyleGroup
-        }
-        QQC2.RadioButton {
-            id: sortStyleOverlay
-            text: i18n("Discord overlay")
-            enabled: !sortById.checked
-            QQC2.ButtonGroup.group: sortStyleGroup
+            spacing: Kirigami.Units.smallSpacing
+
+            QQC2.RadioButton {
+                id: sortStyleApp
+                text: i18n("Discord app")
+            }
+            QQC2.RadioButton {
+                id: sortStyleOverlay
+                text: i18n("Discord overlay")
+            }
         }
 
         Item {
