@@ -3,18 +3,77 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/gin-gonic/gin"
-	"github.com/spf13/viper"
-	"gopkg.in/olahol/melody.v1"
+	"github.com/olahol/melody"
 )
+
+const defaultPort = 5462
+
+// Config is read from ~/.config/VoiceStatus.json. Keys match
+// case-insensitively, so "PORT" and "port" both work.
+type Config struct {
+	Port  flexibleInt `json:"PORT"`
+	Token string      `json:"TOKEN"`
+}
+
+// flexibleInt accepts both a JSON number and a numeric string, since the
+// documented example config uses a string ("5462").
+type flexibleInt int
+
+func (f *flexibleInt) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	if s == "" || s == "null" {
+		return nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return fmt.Errorf("expected a number, got %s", b)
+	}
+	*f = flexibleInt(n)
+	return nil
+}
+
+func loadConfig() (Config, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return Config{}, err
+	}
+	path := filepath.Join(dir, "VoiceStatus.json")
+
+	f, err := os.Open(path)
+	if err != nil {
+		return Config{}, err
+	}
+	defer f.Close()
+
+	var cfg Config
+	if err := json.NewDecoder(f).Decode(&cfg); err != nil {
+		return Config{}, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if cfg.Port == 0 {
+		cfg.Port = defaultPort
+	}
+	if cfg.Port < 1 || cfg.Port > 65535 {
+		return Config{}, fmt.Errorf("PORT %d out of range", cfg.Port)
+	}
+	cfg.Token = strings.TrimPrefix(strings.TrimSpace(cfg.Token), "Bot ")
+	if cfg.Token == "" {
+		return Config{}, fmt.Errorf("TOKEN is missing from %s", path)
+	}
+	return cfg, nil
+}
 
 var m = melody.New()
 var info map[string]interface{}
@@ -34,15 +93,9 @@ type CustomVoiceState struct {
 }
 
 func main() {
-	gin.SetMode(gin.ReleaseMode)
-	r := gin.Default()
-	viper.SetConfigFile(os.ExpandEnv("$HOME/.config/VoiceStatus.json"))
-	viper.SetConfigType("json")
-
-	verr := viper.ReadInConfig()
-	if verr != nil {
-		fmt.Println("fatal error config file: default \n", verr)
-		os.Exit(1)
+	cfg, err := loadConfig()
+	if err != nil {
+		log.Fatalf("config: %v", err)
 	}
 
 	m.Upgrader.CheckOrigin = nil // prevent web pages from connecting
@@ -51,10 +104,8 @@ func main() {
 		"voiceChannels": nil,
 	}
 
-	r.SetTrustedProxies([]string{"localhost"})
-
-	r.GET("/ws", func(c *gin.Context) {
-		m.HandleRequest(c.Writer, c.Request)
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		m.HandleRequest(w, r)
 	})
 
 	m.HandleConnect(func(s *melody.Session) {
@@ -62,10 +113,11 @@ func main() {
 		s.Write([]byte(jsonInfo))
 	})
 
-	go r.Run(":" + viper.GetString("PORT"))
+	go func() {
+		log.Fatal(http.ListenAndServe(":"+strconv.Itoa(int(cfg.Port)), nil))
+	}()
 
-	TOKEN := viper.GetString("TOKEN")
-	discord, dgerr := discordgo.New("Bot " + TOKEN)
+	discord, dgerr := discordgo.New("Bot " + cfg.Token)
 	if dgerr != nil {
 		fmt.Println(dgerr)
 		info["discordAPI"] = "error"
