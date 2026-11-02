@@ -1,107 +1,139 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import QtWebSockets // not installed by default, see README
 import org.kde.plasma.plasmoid
 
 PlasmoidItem {
+    id: root
+
+    readonly property string serverId: Plasmoid.configuration.serverId.trim()
+
+    // Last data received from VoiceServer: guild ID -> { channel ID -> [user] }
+    property var servers: null
+
+    // Sorted users of every occupied voice channel of the configured server.
+    // Re-evaluated whenever the data or any sorting option changes.
+    readonly property var channels: buildChannels(servers, serverId)
+
     preferredRepresentation: compactRepresentation
-    compactRepresentation: RowLayout {
-        id: container
-        spacing: Plasmoid.configuration.channelSpacing
 
-        property var vclist: []
+    // Same order as the Plasma 5 version: by name with the chosen style,
+    // or as received when sorting by ID.
+    function sortUsers(users) {
+        const cfg = Plasmoid.configuration;
+        if (!cfg.sortByNick && !cfg.sortByUsername) {
+            return cfg.sortDirectionDescending ? users.reverse() : users;
+        }
+        const order = cfg.sortDirectionAscending ? 1 : -1;
+        const name = u => (cfg.sortByNick && u.nick) || u.username;
+        if (cfg.sortStyleOverlay) {
+            return users.sort((a, b) => name(a).localeCompare(name(b)) * order);
+        }
+        return users.sort((a, b) => {
+            const an = name(a).toLocaleLowerCase(), bn = name(b).toLocaleLowerCase();
+            if (an !== bn) {
+                return (an < bn ? -1 : 1) * order;
+            }
+            return (a.id - b.id) * order;
+        });
+    }
 
-        property bool firstChangeCompleted: false // hacky solution
-
-        property var sortByNick:              Plasmoid.configuration.sortByNick
-        property var sortByUsername:          Plasmoid.configuration.sortByUsername
-        property var sortById:                Plasmoid.configuration.sortById
-        property var serverId:                Plasmoid.configuration.serverId
-        property var sortDirectionAscending:  Plasmoid.configuration.sortDirectionAscending
-        property var sortDirectionDescending: Plasmoid.configuration.sortDirectionDescending
-        property var sortStyleApp:            Plasmoid.configuration.sortStyleApp
-        property var sortStyleOverlay:        Plasmoid.configuration.sortStyleOverlay
-        property var localhostPort:           Plasmoid.configuration.localhostPort
-        property var reconnectDelay:          Plasmoid.configuration.reconnectDelay
-
-        onSortByNickChanged:              applyTimer.running = true
-        onSortByUsernameChanged:          applyTimer.running = true
-        onSortByIdChanged:                applyTimer.running = true
-        onServerIdChanged:                applyTimer.running = true
-        onSortDirectionAscendingChanged:  applyTimer.running = true
-        onSortDirectionDescendingChanged: applyTimer.running = true
-        onSortStyleAppChanged:            applyTimer.running = true
-        onSortStyleOverlayChanged:        applyTimer.running = true
-        onLocalhostPortChanged:           applyTimer.running = true
-
-        Timer {
-            id: applyTimer
-            interval: 10
-            onTriggered: {
-                if (container.firstChangeCompleted) {
-                    socket.active = false
-                    socket.active = true
-                } else {
-                    container.firstChangeCompleted = true
-                }
+    function buildChannels(allServers, id) {
+        const guild = allServers && id ? allServers[id] : null;
+        if (!guild) {
+            return [];
+        }
+        const result = [];
+        // The server sends channels in the order Discord lists them.
+        for (const users of Object.values(guild)) {
+            if (Array.isArray(users) && users.length > 0) {
+                result.push(sortUsers(users.slice()));
             }
         }
+        return result;
+    }
 
-        Timer {
-            id: reconnectTimer
-            interval: container.reconnectDelay * 1000
-            onTriggered: socket.active = true
+    function handleMessage(message) {
+        let info, parsed;
+        try {
+            info = JSON.parse(message);
+            // voiceChannels is itself JSON encoded, or null before Discord is ready.
+            parsed = typeof info.voiceChannels === "string" ? JSON.parse(info.voiceChannels) : info.voiceChannels;
+        } catch (e) {
+            console.warn("VoiceStatus: ignoring malformed message:", e);
+            return;
         }
+        servers = parsed || null;
+    }
 
-        WebSocket {
-            id: socket
-            active: true
-            url: `ws://localhost:${container.localhostPort}/ws`
+    WebSocket {
+        id: socket
+        url: `ws://localhost:${Plasmoid.configuration.localhostPort}/ws`
+        active: true
 
-            onTextMessageReceived: message => {
-                container.clearChannels()
-                const channel = Qt.createComponent("channel.qml")
-                const servers = JSON.parse(JSON.parse(message)['voiceChannels'])
-                const serverId = container.serverId
-                if (!servers || servers[serverId] == null) return
-                for (const value of Object.values(servers[serverId])) {
-                    if (!value) continue
-                    if (container.sortByNick || container.sortByUsername) {
-                        const sortOrder = container.sortDirectionAscending ? 1 : -1
-                        if (container.sortStyleApp) {
-                            value.sort((a, b) => {
-                                const aFriendly = container.sortByNick && a.nick || a.username
-                                const bFriendly = container.sortByNick && b.nick || b.username
-                                if (aFriendly.toLocaleLowerCase() < bFriendly.toLocaleLowerCase()) return -1 * sortOrder
-                                if (aFriendly.toLocaleLowerCase() > bFriendly.toLocaleLowerCase()) return  1 * sortOrder
-                                return (a.id - b.id) * sortOrder
-                            })
-                        } else if (container.sortStyleOverlay) {
-                            value.sort((a, b) => (a.nick || a.username).localeCompare(b.nick || b.username) * sortOrder)
+        onTextMessageReceived: message => root.handleMessage(message)
+        onStatusChanged: status => {
+            if (status === WebSocket.Error) {
+                console.warn("VoiceStatus: websocket error:", socket.errorString);
+            }
+            if (status === WebSocket.Error || status === WebSocket.Closed) {
+                root.servers = null;
+                socket.active = false;
+                reconnectTimer.restart();
+            }
+        }
+    }
+
+    Timer {
+        id: reconnectTimer
+        interval: Plasmoid.configuration.reconnectDelay * 1000
+        onTriggered: socket.active = true
+    }
+
+    compactRepresentation: Item {
+        id: compact
+
+        // Avatars fill the panel's height.
+        readonly property real avatarSize: height
+
+        // Grow along the panel as channels and users are added.
+        Layout.minimumWidth: content.implicitWidth
+        Layout.preferredWidth: content.implicitWidth
+        Layout.maximumWidth: content.implicitWidth
+
+        RowLayout {
+            id: content
+            anchors.centerIn: parent
+            spacing: Plasmoid.configuration.channelSpacing
+
+            Repeater {
+                model: root.channels
+
+                delegate: RowLayout {
+                    id: channel
+                    required property var modelData
+
+                    spacing: Plasmoid.configuration.userSpacing
+
+                    Repeater {
+                        model: channel.modelData
+
+                        delegate: Image {
+                            required property var modelData
+
+                            Layout.preferredWidth: compact.avatarSize
+                            Layout.preferredHeight: compact.avatarSize
+                            source: modelData.avatar
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
+                            smooth: true
+                            mipmap: Plasmoid.configuration.avatarMipmap
                         }
-                    } else if (container.sortById && container.sortDirectionDescending) {
-                        value.reverse()
                     }
-                    container.vclist.push(channel.createObject(container, { users: value }))
                 }
             }
-            onStatusChanged: status => {
-                if (status == WebSocket.Error) {
-                    console.log(`ws error: ${socket.errorString}`)
-                } else if (status == WebSocket.Open) {
-                    console.log('ws connected')
-                } else if (status == WebSocket.Closed) {
-                    console.log('ws disconnected')
-                    container.clearChannels()
-                    socket.active = false
-                    reconnectTimer.running = true
-                }
-            }
-        }
-
-        function clearChannels() {
-            vclist.forEach(c => c.destroy())
-            vclist = []
         }
     }
 }
