@@ -1,11 +1,12 @@
 [Unit]
-Description=VoiceServer
-After=network-online.target
+Description=VoiceServer (Discord voice status for the VoiceStatus widget)
+Documentation=https://github.com/pipipear/VoiceStatus
 
 [Service]
 ExecStart=%h/go/bin/VoiceServer
 Restart=always
 RestartSec=10
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=default.target
