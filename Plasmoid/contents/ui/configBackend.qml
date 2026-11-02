@@ -1,38 +1,40 @@
-import QtQuick 2.0
-import QtQuick.Controls 2.5
-import QtQuick.Layouts 1.12
-import org.kde.kirigami 2.4 as Kirigami
+import QtQuick
+import QtQuick.Controls as QQC2
+import org.kde.kcmutils as KCM
+import org.kde.kirigami as Kirigami
 
-Kirigami.FormLayout {
-  id: page
+KCM.SimpleKCM {
+    property alias cfg_localhostPort: localhostPort.value
+    property alias cfg_reconnectDelay: reconnectDelay.value
 
-  property alias cfg_localhostPort: localhostPort.value
-  property alias cfg_reconnectDelay: reconnectDelay.value
-  
-  SpinBox {
-    id: localhostPort
-    Kirigami.FormData.label: i18n('Localhost port: ')
-    from: 1024 // lowest user port
-    to: 65535
-    textFromValue: function (v) { return v } // remove comma
-  }
+    Kirigami.FormLayout {
+        QQC2.SpinBox {
+            id: localhostPort
+            Kirigami.FormData.label: i18n("VoiceServer port:")
+            from: 1024 // lowest unprivileged port
+            to: 65535
+            textFromValue: (value, locale) => String(value) // no thousands separator
+            valueFromText: (text, locale) => parseInt(text, 10) || from
+        }
 
-  SpinBox {
-    id: reconnectDelay
-    Kirigami.FormData.label: i18n('Reconnect delay: ')
-    from: 1
-    to: 60
-    textFromValue: function (v) { return v + ' second' + (v == 1 ? '' : 's') }
-    valueFromText: function (t) { return Math.min(t.replace(/\D/g,''), 60) }
-  }
+        QQC2.SpinBox {
+            id: reconnectDelay
+            Kirigami.FormData.label: i18n("Reconnect delay:")
+            from: 1
+            to: 60
+            textFromValue: (value, locale) => i18np("%1 second", "%1 seconds", value)
+            valueFromText: (text, locale) => parseInt(text.replace(/\D/g, ""), 10) || from
+        }
 
-  Item {
-    Kirigami.FormData.isSection: false
-  }
+        Item {
+            Kirigami.FormData.isSection: true
+        }
 
-  Button {
-    Kirigami.FormData.label: i18n('See here to configure: ')
-    text: "github.com/pipipear/VoiceStatus"
-    onClicked: Qt.openUrlExternally("https://github.com/pipipear/VoiceStatus");
-  }
+        QQC2.Button {
+            Kirigami.FormData.label: i18n("Server setup instructions:")
+            text: "github.com/pipipear/VoiceStatus"
+            icon.name: "internet-services"
+            onClicked: Qt.openUrlExternally("https://github.com/pipipear/VoiceStatus")
+        }
+    }
 }
