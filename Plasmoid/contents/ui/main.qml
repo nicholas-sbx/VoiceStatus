@@ -1,119 +1,231 @@
-import QtQuick 2.15
-import QtQuick.Layouts 1.1
-import org.kde.plasma.components 2.0 as PlasmaComponents
-import org.kde.plasma.plasmoid 2.0
-import org.kde.plasma.core 2.0 as PlasmaCore
-import QtWebSockets 1.15 // usually not installed by default
+pragma ComponentBehavior: Bound
 
-Item {
-  Plasmoid.preferredRepresentation: Plasmoid.compactRepresentation
-  Plasmoid.compactRepresentation: RowLayout {
-    id: container
-    spacing: plasmoid.configuration.channelSpacing
+import QtQuick
+import QtQuick.Layouts
+import QtWebSockets // not installed by default, see README
+import org.kde.kirigami as Kirigami
+import org.kde.plasma.core as PlasmaCore
+import org.kde.plasma.plasmoid
 
-    property var vclist: []
+PlasmoidItem {
+    id: root
 
-    property bool firstChangeCompleted: false // hacky solution
+    readonly property bool vertical: Plasmoid.formFactor === PlasmaCore.Types.Vertical
+    readonly property bool horizontal: Plasmoid.formFactor === PlasmaCore.Types.Horizontal
+    readonly property bool editMode: Plasmoid.containment?.corona?.editMode ?? false
 
-    property var sortByNick:              plasmoid.configuration.sortByNick
-    property var sortByUsername:          plasmoid.configuration.sortByUsername
-    property var sortById:                plasmoid.configuration.sortById
-    property var serverId:                plasmoid.configuration.serverId
-    property var sortDirectionAscending:  plasmoid.configuration.sortDirectionAscending
-    property var sortDirectionDescending: plasmoid.configuration.sortDirectionDescending
-    property var sortStyleApp:            plasmoid.configuration.sortStyleApp
-    property var sortStyleOverlay:        plasmoid.configuration.sortStyleOverlay
-    property var localhostPort:           plasmoid.configuration.localhostPort
-    property var reconnectDelay:          plasmoid.configuration.reconnectDelay
+    readonly property string serverId: Plasmoid.configuration.serverId.trim()
+    readonly property bool connected: socket.status === WebSocket.Open
+    property string discordStatus: "disconnected"
 
-    onSortByNickChanged:              applyTimer.running = true
-    onSortByUsernameChanged:          applyTimer.running = true
-    onSortByIdChanged:                applyTimer.running = true
-    onServerIdChanged:                applyTimer.running = true
-    onSortDirectionAscendingChanged:  applyTimer.running = true
-    onSortDirectionDescendingChanged: applyTimer.running = true
-    onSortStyleAppChanged:            applyTimer.running = true
-    onSortStyleOverlayChanged:        applyTimer.running = true
-    onLocalhostPortChanged:           applyTimer.running = true
-    
-    Timer {
-      id: applyTimer
-      interval: 10
-      running: false
-      repeat: false
-      property int returnedValue: 0
-      onTriggered: {
-        if (firstChangeCompleted) {
-          socket.active = false
-          socket.active = true
-          applyTimer.running = false
-        } else {
-          firstChangeCompleted = true
+    // Last data received from VoiceServer: guild ID -> { channel ID -> [user] }
+    property var servers: null
+
+    // Sorted users of every occupied voice channel of the configured server.
+    // Re-evaluated whenever the data or any sorting option changes.
+    readonly property var channels: buildChannels(servers, serverId)
+
+    preferredRepresentation: compactRepresentation
+    Plasmoid.status: channels.length > 0 ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
+
+    toolTipMainText: Plasmoid.title
+    toolTipTextFormat: Text.PlainText
+    toolTipSubText: {
+        if (!connected) {
+            return i18n("Not connected to VoiceServer on port %1", Plasmoid.configuration.localhostPort);
         }
-      }
+        if (discordStatus !== "connected") {
+            return i18n("VoiceServer is not connected to Discord");
+        }
+        if (serverId === "") {
+            return i18n("No server ID configured");
+        }
+        if (channels.length === 0) {
+            return i18n("Nobody is in a voice channel");
+        }
+        return channels.map(users => users.map(u => displayName(u, true)).join(", ")).join("\n");
     }
 
-    Timer {
-      id: reconnectTimer
-      interval: reconnectDelay * 1000
-      running: false
-      repeat: false
-      property int returnedValue: 0
-      onTriggered: {
-        socket.active = true
-        reconnectTimer.running = false
-      }
+    function displayName(user, preferNick) {
+        return (preferNick && (user.nick || user.global_name)) || user.username || "";
+    }
+
+    // Discord IDs are 64-bit integers, too large for JS numbers: compare as
+    // strings, shorter means smaller.
+    function compareIds(a, b) {
+        if (a.length !== b.length) {
+            return a.length - b.length;
+        }
+        return a < b ? -1 : (a > b ? 1 : 0);
+    }
+
+    function sortUsers(users) {
+        const cfg = Plasmoid.configuration;
+        const order = cfg.sortDirectionAscending ? 1 : -1;
+        const byId = (a, b) => compareIds(String(a.user_id), String(b.user_id));
+
+        if (!cfg.sortByNick && !cfg.sortByUsername) {
+            return users.sort((a, b) => byId(a, b) * order);
+        }
+
+        const named = users.map(u => ({ user: u, name: displayName(u, cfg.sortByNick) }));
+        if (cfg.sortStyleOverlay) {
+            named.sort((a, b) => a.name.localeCompare(b.name) * order);
+        } else {
+            // Discord app style: case-insensitive, ties broken by user ID
+            named.forEach(n => n.key = n.name.toLocaleLowerCase());
+            named.sort((a, b) => {
+                if (a.key !== b.key) {
+                    return (a.key < b.key ? -1 : 1) * order;
+                }
+                return byId(a.user, b.user) * order;
+            });
+        }
+        return named.map(n => n.user);
+    }
+
+    function buildChannels(allServers, id) {
+        const guild = allServers && id ? allServers[id] : null;
+        if (!guild) {
+            return [];
+        }
+        const result = [];
+        // The server sends channels in the order Discord lists them.
+        for (const users of Object.values(guild)) {
+            if (Array.isArray(users) && users.length > 0) {
+                result.push(sortUsers(users.slice()));
+            }
+        }
+        return result;
+    }
+
+    function handleMessage(message) {
+        let info, parsed;
+        try {
+            info = JSON.parse(message);
+            // voiceChannels is itself JSON encoded, or null before Discord is ready.
+            parsed = typeof info.voiceChannels === "string" ? JSON.parse(info.voiceChannels) : info.voiceChannels;
+        } catch (e) {
+            console.warn("VoiceStatus: ignoring malformed message:", e);
+            return;
+        }
+        discordStatus = info.discordAPI || "disconnected";
+        servers = parsed || null;
+    }
+
+    // Only load avatars from Discord's CDN, whatever the local server sends.
+    function avatarUrl(url) {
+        return typeof url === "string" && url.startsWith("https://cdn.discordapp.com/") ? url : "";
     }
 
     WebSocket {
-      id: socket
-      active: true
-      url: `ws://localhost:${localhostPort}/ws`
+        id: socket
+        url: `ws://127.0.0.1:${Plasmoid.configuration.localhostPort}/ws`
+        active: true
 
-      onTextMessageReceived: {
-        clearChannels()
-        var channel = Qt.createComponent("channel.qml")
-        var servers = JSON.parse(JSON.parse(message)['voiceChannels'])
-        if (!servers || servers.length == 0 || servers[serverId] == null) return
-        for (const [key, value] of Object.entries(servers[serverId])) {
-          if (!value) continue
-          if (sortByNick || sortByUsername) {
-            var sortOrder = sortDirectionAscending ? 1 : -1
-            if (sortStyleApp) {
-              value.sort((a, b) => {
-                var aFriendly = sortByNick && a.nick || a.username
-                var bFriendly = sortByNick && b.nick || b.username
-                if (aFriendly.toLocaleLowerCase() < bFriendly.toLocaleLowerCase()) return -1 * sortOrder
-                if (aFriendly.toLocaleLowerCase() > bFriendly.toLocaleLowerCase()) return  1 * sortOrder
-                return (a.id - b.id) * sortOrder
-              })
-            } else if (sortStyleOverlay) {
-              value.sort((a, b) => (a.nick || a.username).localeCompare(b.nick || b.username) * sortOrder)
+        onTextMessageReceived: message => root.handleMessage(message)
+        onStatusChanged: status => {
+            if (status === WebSocket.Error) {
+                console.warn("VoiceStatus: websocket error:", socket.errorString);
             }
-          } else if (sortById && sortDirectionDescending) {
-            value.reverse()
-          }
-          vclist.push(channel.createObject(container, { users: value }))
+            if (status === WebSocket.Error || status === WebSocket.Closed) {
+                root.servers = null;
+                root.discordStatus = "disconnected";
+                socket.active = false;
+                reconnectTimer.restart();
+            }
         }
-      }
-      onStatusChanged: {
-        if (socket.status == WebSocket.Error) {
-          console.log(`ws error: ${socket.errorString}`);
-        } else if (socket.status == WebSocket.Open) {
-          console.log('ws connected');
-        } else if (socket.status == WebSocket.Closed) {
-          console.log('ws disconnected');
-          clearChannels()
-          socket.active = false
-          reconnectTimer.running = true
-        }
-        console.log(`ws status: ${socket.status}`);
-      }
     }
 
-    function clearChannels() {
-      vclist.forEach(c => c.destroy())
-      vclist = []
+    Timer {
+        id: reconnectTimer
+        interval: Plasmoid.configuration.reconnectDelay * 1000
+        onTriggered: socket.active = true
     }
-  }
+
+    compactRepresentation: Item {
+        id: compact
+
+        // Avatars fill the panel's thickness: its height when horizontal,
+        // its width when vertical.
+        readonly property real avatarSize: root.vertical ? width
+            : root.horizontal ? height
+            : Kirigami.Units.iconSizes.large
+
+        // Without anything to show the widget would be invisible, so show its
+        // icon while it is unconfigured or the panel is being edited.
+        readonly property bool showPlaceholder: root.channels.length === 0 && (root.serverId === "" || root.editMode)
+
+        readonly property real contentWidth: showPlaceholder ? avatarSize : content.implicitWidth
+        readonly property real contentHeight: showPlaceholder ? avatarSize : content.implicitHeight
+
+        // Grow along the panel, fill it across.
+        Layout.minimumWidth: root.vertical ? 0 : contentWidth
+        Layout.preferredWidth: root.vertical ? -1 : contentWidth
+        Layout.maximumWidth: root.vertical ? Infinity : contentWidth
+        Layout.minimumHeight: root.horizontal ? 0 : contentHeight
+        Layout.preferredHeight: root.horizontal ? -1 : contentHeight
+        Layout.maximumHeight: root.horizontal ? Infinity : contentHeight
+
+        Kirigami.Icon {
+            anchors.centerIn: parent
+            width: compact.avatarSize
+            height: compact.avatarSize
+            visible: compact.showPlaceholder
+            source: Plasmoid.icon
+            active: placeholderMouse.containsMouse
+
+            MouseArea {
+                id: placeholderMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: Plasmoid.internalAction("configure").trigger()
+            }
+        }
+
+        GridLayout {
+            id: content
+            anchors.centerIn: parent
+            visible: !compact.showPlaceholder
+            flow: root.vertical ? GridLayout.TopToBottom : GridLayout.LeftToRight
+            rowSpacing: Plasmoid.configuration.channelSpacing
+            columnSpacing: Plasmoid.configuration.channelSpacing
+
+            Repeater {
+                model: root.channels
+
+                delegate: GridLayout {
+                    id: channel
+                    required property var modelData
+
+                    flow: content.flow
+                    rowSpacing: Plasmoid.configuration.userSpacing
+                    columnSpacing: Plasmoid.configuration.userSpacing
+
+                    Repeater {
+                        model: channel.modelData
+
+                        delegate: Image {
+                            id: avatar
+                            required property var modelData
+
+                            Layout.preferredWidth: compact.avatarSize
+                            Layout.preferredHeight: compact.avatarSize
+                            source: root.avatarUrl(modelData.avatar)
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
+                            smooth: true
+                            mipmap: Plasmoid.configuration.avatarMipmap
+
+                            Kirigami.Icon {
+                                anchors.fill: parent
+                                visible: avatar.status !== Image.Ready
+                                source: "user-identity"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
