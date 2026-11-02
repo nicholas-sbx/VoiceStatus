@@ -24,25 +24,42 @@ PlasmoidItem {
 
     preferredRepresentation: compactRepresentation
 
-    // Same order as the Plasma 5 version: by name with the chosen style,
-    // or as received when sorting by ID.
+    function displayName(user, preferNick) {
+        return (preferNick && (user.nick || user.global_name)) || user.username || "";
+    }
+
+    // Discord IDs are 64-bit integers, too large for JS numbers: compare as
+    // strings, shorter means smaller.
+    function compareIds(a, b) {
+        if (a.length !== b.length) {
+            return a.length - b.length;
+        }
+        return a < b ? -1 : (a > b ? 1 : 0);
+    }
+
     function sortUsers(users) {
         const cfg = Plasmoid.configuration;
-        if (!cfg.sortByNick && !cfg.sortByUsername) {
-            return cfg.sortDirectionDescending ? users.reverse() : users;
-        }
         const order = cfg.sortDirectionAscending ? 1 : -1;
-        const name = u => (cfg.sortByNick && u.nick) || u.username;
-        if (cfg.sortStyleOverlay) {
-            return users.sort((a, b) => name(a).localeCompare(name(b)) * order);
+        const byId = (a, b) => compareIds(String(a.user_id), String(b.user_id));
+
+        if (!cfg.sortByNick && !cfg.sortByUsername) {
+            return users.sort((a, b) => byId(a, b) * order);
         }
-        return users.sort((a, b) => {
-            const an = name(a).toLocaleLowerCase(), bn = name(b).toLocaleLowerCase();
-            if (an !== bn) {
-                return (an < bn ? -1 : 1) * order;
-            }
-            return (a.id - b.id) * order;
-        });
+
+        const named = users.map(u => ({ user: u, name: displayName(u, cfg.sortByNick) }));
+        if (cfg.sortStyleOverlay) {
+            named.sort((a, b) => a.name.localeCompare(b.name) * order);
+        } else {
+            // Discord app style: case-insensitive, ties broken by user ID
+            named.forEach(n => n.key = n.name.toLocaleLowerCase());
+            named.sort((a, b) => {
+                if (a.key !== b.key) {
+                    return (a.key < b.key ? -1 : 1) * order;
+                }
+                return byId(a.user, b.user) * order;
+            });
+        }
+        return named.map(n => n.user);
     }
 
     function buildChannels(allServers, id) {
