@@ -243,10 +243,17 @@ func guildVoiceChannels(g *discordgo.Guild) orderedChannels {
 		return orderedChannels{}
 	}
 
-	members := make(map[string]*discordgo.Member, len(g.Members))
+	// Look up only the members in voice, rather than indexing every member
+	// of a possibly large guild on each update.
+	members := make(map[string]*discordgo.Member, len(g.VoiceStates))
+	for _, vs := range g.VoiceStates {
+		members[vs.UserID] = nil
+	}
 	for _, m := range g.Members {
 		if m.User != nil {
-			members[m.User.ID] = m
+			if _, inVoice := members[m.User.ID]; inVoice {
+				members[m.User.ID] = m
+			}
 		}
 	}
 
@@ -306,6 +313,26 @@ func guildVoiceChannels(g *discordgo.Guild) orderedChannels {
 		appendParent(cat.ID)
 	}
 	return out
+}
+
+// userInVoice reports whether a user is in a voice channel of a guild.
+// discordgo's State.VoiceState reads the voice states without holding the
+// state lock, so this takes the lock itself.
+func userInVoice(st *discordgo.State, guildID, userID string) bool {
+	st.RLock()
+	defer st.RUnlock()
+	for _, g := range st.Guilds {
+		if g.ID != guildID {
+			continue
+		}
+		for _, vs := range g.VoiceStates {
+			if vs.UserID == userID && vs.ChannelID != "" {
+				return true
+			}
+		}
+		return false
+	}
+	return false
 }
 
 // sortChannels sorts a slice we own (never the shared state slices) by
@@ -418,7 +445,7 @@ func main() {
 		if m.User == nil {
 			return
 		}
-		if _, err := s.State.VoiceState(m.GuildID, m.User.ID); err == nil {
+		if userInVoice(s.State, m.GuildID, m.User.ID) {
 			update(s)
 		}
 	})

@@ -115,3 +115,19 @@ func TestWebSocketAccess(t *testing.T) {
 		t.Fatalf("non-loopback Host got status %d, want 403", res.StatusCode)
 	}
 }
+
+func TestUserInVoice(t *testing.T) {
+	st := discordgo.NewState()
+	if err := st.GuildAdd(&discordgo.Guild{
+		ID:          "1",
+		VoiceStates: []*discordgo.VoiceState{{UserID: "100", ChannelID: "10"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !userInVoice(st, "1", "100") {
+		t.Error("user 100 should be in voice")
+	}
+	if userInVoice(st, "1", "101") || userInVoice(st, "2", "100") {
+		t.Error("unexpected match")
+	}
+}
