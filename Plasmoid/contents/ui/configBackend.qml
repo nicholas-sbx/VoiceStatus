@@ -13,6 +13,7 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("VoiceServer port:")
             from: 1024 // lowest unprivileged port
             to: 65535
+            editable: true
             textFromValue: (value, locale) => String(value) // no thousands separator
             valueFromText: (text, locale) => parseInt(text, 10) || from
         }

@@ -25,8 +25,38 @@ PlasmoidItem {
     // Re-evaluated whenever the data or any sorting option changes.
     readonly property var channels: buildChannels(servers, serverId)
 
-    preferredRepresentation: compactRepresentation
-    Plasmoid.status: channels.length > 0 ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
+    // Without anything to show the widget would be invisible, so show its
+    // icon while it is unconfigured or the panel is being edited.
+    readonly property bool showPlaceholder: channels.length === 0 && (serverId === "" || editMode)
+
+    // The widget has no popup: its content sits directly in the PlasmoidItem,
+    // like the panel spacer or pager. (A compactRepresentation without a
+    // fullRepresentation is never instantiated in Plasma 6.)
+    preferredRepresentation: fullRepresentation
+
+    // Hidden removes the widget from the panel while nobody is in voice;
+    // panels still show hidden widgets in edit mode.
+    Plasmoid.status: channels.length > 0 ? PlasmaCore.Types.ActiveStatus
+        : serverId === "" ? PlasmaCore.Types.PassiveStatus
+        : PlasmaCore.Types.HiddenStatus
+
+    // Avatars fill the panel's thickness: its height when horizontal,
+    // its width when vertical.
+    readonly property real avatarSize: vertical ? width
+        : horizontal ? height
+        : Kirigami.Units.iconSizes.large
+
+    readonly property real contentWidth: showPlaceholder ? avatarSize : content.implicitWidth
+    readonly property real contentHeight: showPlaceholder ? avatarSize : content.implicitHeight
+
+    // The panel reads these from the PlasmoidItem: grow along the panel,
+    // fill it across.
+    Layout.minimumWidth: vertical ? 0 : contentWidth
+    Layout.preferredWidth: vertical ? -1 : contentWidth
+    Layout.maximumWidth: vertical ? Infinity : contentWidth
+    Layout.minimumHeight: horizontal ? 0 : contentHeight
+    Layout.preferredHeight: horizontal ? -1 : contentHeight
+    Layout.maximumHeight: horizontal ? Infinity : contentHeight
 
     toolTipMainText: Plasmoid.title
     toolTipTextFormat: Text.PlainText
@@ -143,35 +173,20 @@ PlasmoidItem {
         onTriggered: socket.active = true
     }
 
-    compactRepresentation: Item {
-        id: compact
-
-        // Avatars fill the panel's thickness: its height when horizontal,
-        // its width when vertical.
-        readonly property real avatarSize: root.vertical ? width
-            : root.horizontal ? height
-            : Kirigami.Units.iconSizes.large
-
-        // Without anything to show the widget would be invisible, so show its
-        // icon while it is unconfigured or the panel is being edited.
-        readonly property bool showPlaceholder: root.channels.length === 0 && (root.serverId === "" || root.editMode)
-
-        readonly property real contentWidth: showPlaceholder ? avatarSize : content.implicitWidth
-        readonly property real contentHeight: showPlaceholder ? avatarSize : content.implicitHeight
-
-        // Grow along the panel, fill it across.
-        Layout.minimumWidth: root.vertical ? 0 : contentWidth
-        Layout.preferredWidth: root.vertical ? -1 : contentWidth
-        Layout.maximumWidth: root.vertical ? Infinity : contentWidth
-        Layout.minimumHeight: root.horizontal ? 0 : contentHeight
-        Layout.preferredHeight: root.horizontal ? -1 : contentHeight
-        Layout.maximumHeight: root.horizontal ? Infinity : contentHeight
+    // Only the popup host (CompactApplet) draws the PlasmoidItem tooltip, and
+    // this widget has none, so draw it here.
+    PlasmaCore.ToolTipArea {
+        anchors.fill: parent
+        mainText: root.toolTipMainText
+        subText: root.toolTipSubText
+        textFormat: root.toolTipTextFormat
+        location: Plasmoid.location
 
         Kirigami.Icon {
             anchors.centerIn: parent
-            width: compact.avatarSize
-            height: compact.avatarSize
-            visible: compact.showPlaceholder
+            width: root.avatarSize
+            height: root.avatarSize
+            visible: root.showPlaceholder
             source: Plasmoid.icon
             active: placeholderMouse.containsMouse
 
@@ -186,7 +201,7 @@ PlasmoidItem {
         GridLayout {
             id: content
             anchors.centerIn: parent
-            visible: !compact.showPlaceholder
+            visible: !root.showPlaceholder
             flow: root.vertical ? GridLayout.TopToBottom : GridLayout.LeftToRight
             rowSpacing: Plasmoid.configuration.channelSpacing
             columnSpacing: Plasmoid.configuration.channelSpacing
@@ -209,8 +224,8 @@ PlasmoidItem {
                             id: avatar
                             required property var modelData
 
-                            Layout.preferredWidth: compact.avatarSize
-                            Layout.preferredHeight: compact.avatarSize
+                            Layout.preferredWidth: root.avatarSize
+                            Layout.preferredHeight: root.avatarSize
                             source: root.avatarUrl(modelData.avatar)
                             fillMode: Image.PreserveAspectFit
                             asynchronous: true
