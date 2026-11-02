@@ -3,10 +3,15 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtWebSockets // not installed by default, see README
+import org.kde.kirigami as Kirigami
+import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasmoid
 
 PlasmoidItem {
     id: root
+
+    readonly property bool vertical: Plasmoid.formFactor === PlasmaCore.Types.Vertical
+    readonly property bool horizontal: Plasmoid.formFactor === PlasmaCore.Types.Horizontal
 
     readonly property string serverId: Plasmoid.configuration.serverId.trim()
 
@@ -95,27 +100,40 @@ PlasmoidItem {
     compactRepresentation: Item {
         id: compact
 
-        // Avatars fill the panel's height.
-        readonly property real avatarSize: height
+        // Avatars fill the panel's thickness: its height when horizontal,
+        // its width when vertical.
+        readonly property real avatarSize: root.vertical ? width
+            : root.horizontal ? height
+            : Kirigami.Units.iconSizes.large
 
-        // Grow along the panel as channels and users are added.
-        Layout.minimumWidth: content.implicitWidth
-        Layout.preferredWidth: content.implicitWidth
-        Layout.maximumWidth: content.implicitWidth
+        readonly property real contentWidth: content.implicitWidth
+        readonly property real contentHeight: content.implicitHeight
 
-        RowLayout {
+        // Grow along the panel, fill it across.
+        Layout.minimumWidth: root.vertical ? 0 : contentWidth
+        Layout.preferredWidth: root.vertical ? -1 : contentWidth
+        Layout.maximumWidth: root.vertical ? Infinity : contentWidth
+        Layout.minimumHeight: root.horizontal ? 0 : contentHeight
+        Layout.preferredHeight: root.horizontal ? -1 : contentHeight
+        Layout.maximumHeight: root.horizontal ? Infinity : contentHeight
+
+        GridLayout {
             id: content
             anchors.centerIn: parent
-            spacing: Plasmoid.configuration.channelSpacing
+            flow: root.vertical ? GridLayout.TopToBottom : GridLayout.LeftToRight
+            rowSpacing: Plasmoid.configuration.channelSpacing
+            columnSpacing: Plasmoid.configuration.channelSpacing
 
             Repeater {
                 model: root.channels
 
-                delegate: RowLayout {
+                delegate: GridLayout {
                     id: channel
                     required property var modelData
 
-                    spacing: Plasmoid.configuration.userSpacing
+                    flow: content.flow
+                    rowSpacing: Plasmoid.configuration.userSpacing
+                    columnSpacing: Plasmoid.configuration.userSpacing
 
                     Repeater {
                         model: channel.modelData
