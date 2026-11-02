@@ -1,7 +1,8 @@
 [Desktop Entry]
 Name=VoiceServer
+Comment=Serves Discord voice channel status to the VoiceStatus widget
 Icon=speaker
-Exec=~/go/bin/VoiceServer
+Exec=sh -c "exec ~/go/bin/VoiceServer"
 Terminal=false
 Type=Application
 X-GNOME-Autostart-enabled=true

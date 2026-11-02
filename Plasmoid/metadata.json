@@ -1,0 +1,24 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Pi"
+            }
+        ],
+        "Category": "Utilities",
+        "Description": "Shows users in a Discord voice channel",
+        "FormFactors": [
+            "horizontal",
+            "vertical",
+            "desktop"
+        ],
+        "Icon": "speaker",
+        "Id": "com.github.pipipear.voicestatus",
+        "License": "GPL-3.0",
+        "Name": "VoiceStatus",
+        "Version": "2.0.0",
+        "Website": "https://github.com/pipipear/VoiceStatus"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
