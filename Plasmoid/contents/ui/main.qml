@@ -113,9 +113,14 @@ PlasmoidItem {
         servers = parsed || null;
     }
 
+    // Only load avatars from Discord's CDN, whatever the local server sends.
+    function avatarUrl(url) {
+        return typeof url === "string" && url.startsWith("https://cdn.discordapp.com/") ? url : "";
+    }
+
     WebSocket {
         id: socket
-        url: `ws://localhost:${Plasmoid.configuration.localhostPort}/ws`
+        url: `ws://127.0.0.1:${Plasmoid.configuration.localhostPort}/ws`
         active: true
 
         onTextMessageReceived: message => root.handleMessage(message)
@@ -206,7 +211,7 @@ PlasmoidItem {
 
                             Layout.preferredWidth: compact.avatarSize
                             Layout.preferredHeight: compact.avatarSize
-                            source: modelData.avatar
+                            source: root.avatarUrl(modelData.avatar)
                             fillMode: Image.PreserveAspectFit
                             asynchronous: true
                             smooth: true
