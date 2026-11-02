@@ -12,8 +12,11 @@ PlasmoidItem {
 
     readonly property bool vertical: Plasmoid.formFactor === PlasmaCore.Types.Vertical
     readonly property bool horizontal: Plasmoid.formFactor === PlasmaCore.Types.Horizontal
+    readonly property bool editMode: Plasmoid.containment?.corona?.editMode ?? false
 
     readonly property string serverId: Plasmoid.configuration.serverId.trim()
+    readonly property bool connected: socket.status === WebSocket.Open
+    property string discordStatus: "disconnected"
 
     // Last data received from VoiceServer: guild ID -> { channel ID -> [user] }
     property var servers: null
@@ -23,6 +26,25 @@ PlasmoidItem {
     readonly property var channels: buildChannels(servers, serverId)
 
     preferredRepresentation: compactRepresentation
+    Plasmoid.status: channels.length > 0 ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
+
+    toolTipMainText: Plasmoid.title
+    toolTipTextFormat: Text.PlainText
+    toolTipSubText: {
+        if (!connected) {
+            return i18n("Not connected to VoiceServer on port %1", Plasmoid.configuration.localhostPort);
+        }
+        if (discordStatus !== "connected") {
+            return i18n("VoiceServer is not connected to Discord");
+        }
+        if (serverId === "") {
+            return i18n("No server ID configured");
+        }
+        if (channels.length === 0) {
+            return i18n("Nobody is in a voice channel");
+        }
+        return channels.map(users => users.map(u => displayName(u, true)).join(", ")).join("\n");
+    }
 
     function displayName(user, preferNick) {
         return (preferNick && (user.nick || user.global_name)) || user.username || "";
@@ -87,6 +109,7 @@ PlasmoidItem {
             console.warn("VoiceStatus: ignoring malformed message:", e);
             return;
         }
+        discordStatus = info.discordAPI || "disconnected";
         servers = parsed || null;
     }
 
@@ -102,6 +125,7 @@ PlasmoidItem {
             }
             if (status === WebSocket.Error || status === WebSocket.Closed) {
                 root.servers = null;
+                root.discordStatus = "disconnected";
                 socket.active = false;
                 reconnectTimer.restart();
             }
@@ -123,8 +147,12 @@ PlasmoidItem {
             : root.horizontal ? height
             : Kirigami.Units.iconSizes.large
 
-        readonly property real contentWidth: content.implicitWidth
-        readonly property real contentHeight: content.implicitHeight
+        // Without anything to show the widget would be invisible, so show its
+        // icon while it is unconfigured or the panel is being edited.
+        readonly property bool showPlaceholder: root.channels.length === 0 && (root.serverId === "" || root.editMode)
+
+        readonly property real contentWidth: showPlaceholder ? avatarSize : content.implicitWidth
+        readonly property real contentHeight: showPlaceholder ? avatarSize : content.implicitHeight
 
         // Grow along the panel, fill it across.
         Layout.minimumWidth: root.vertical ? 0 : contentWidth
@@ -134,9 +162,26 @@ PlasmoidItem {
         Layout.preferredHeight: root.horizontal ? -1 : contentHeight
         Layout.maximumHeight: root.horizontal ? Infinity : contentHeight
 
+        Kirigami.Icon {
+            anchors.centerIn: parent
+            width: compact.avatarSize
+            height: compact.avatarSize
+            visible: compact.showPlaceholder
+            source: Plasmoid.icon
+            active: placeholderMouse.containsMouse
+
+            MouseArea {
+                id: placeholderMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: Plasmoid.internalAction("configure").trigger()
+            }
+        }
+
         GridLayout {
             id: content
             anchors.centerIn: parent
+            visible: !compact.showPlaceholder
             flow: root.vertical ? GridLayout.TopToBottom : GridLayout.LeftToRight
             rowSpacing: Plasmoid.configuration.channelSpacing
             columnSpacing: Plasmoid.configuration.channelSpacing
@@ -156,6 +201,7 @@ PlasmoidItem {
                         model: channel.modelData
 
                         delegate: Image {
+                            id: avatar
                             required property var modelData
 
                             Layout.preferredWidth: compact.avatarSize
@@ -165,6 +211,12 @@ PlasmoidItem {
                             asynchronous: true
                             smooth: true
                             mipmap: Plasmoid.configuration.avatarMipmap
+
+                            Kirigami.Icon {
+                                anchors.fill: parent
+                                visible: avatar.status !== Image.Ready
+                                source: "user-identity"
+                            }
                         }
                     }
                 }
