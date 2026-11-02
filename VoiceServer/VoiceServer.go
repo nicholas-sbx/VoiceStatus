@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,7 +20,14 @@ import (
 	"github.com/olahol/melody"
 )
 
-const defaultPort = 5462
+const (
+	defaultPort = 5462
+
+	// listenHost keeps the server reachable from this machine only. The
+	// voice data includes user IDs and names, so it must not be exposed to
+	// the network.
+	listenHost = "127.0.0.1"
+)
 
 // Config is read from ~/.config/VoiceStatus.json. Keys match
 // case-insensitively, so "PORT" and "port" both work.
@@ -57,6 +65,10 @@ func loadConfig() (Config, error) {
 		return Config{}, err
 	}
 	defer f.Close()
+
+	if fi, err := f.Stat(); err == nil && fi.Mode().Perm()&0o077 != 0 {
+		log.Printf("warning: %s contains your bot token but is readable by other users; run: chmod 600 %q", path, path)
+	}
 
 	var cfg Config
 	if err := json.NewDecoder(f).Decode(&cfg); err != nil {
@@ -98,15 +110,32 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
-	m.Upgrader.CheckOrigin = nil // prevent web pages from connecting
+	// Browsers always send an Origin header with WebSocket handshakes, while
+	// the widget (Qt) does not. Rejecting any Origin stops web pages from
+	// reading the voice data through the user's browser.
+	m.Upgrader.CheckOrigin = func(r *http.Request) bool {
+		return r.Header.Get("Origin") == ""
+	}
 	info = map[string]interface{}{
 		"discordAPI":    "disconnected",
 		"voiceChannels": nil,
 	}
 
-	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		// Guard against DNS rebinding: a malicious site resolving its own
+		// domain to 127.0.0.1 would otherwise pass the same-host checks.
+		if !isLoopbackHost(r.Host) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 		m.HandleRequest(w, r)
 	})
+	httpServer := &http.Server{
+		Addr:              net.JoinHostPort(listenHost, strconv.Itoa(int(cfg.Port))),
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	m.HandleConnect(func(s *melody.Session) {
 		jsonInfo, _ := json.Marshal(info)
@@ -114,7 +143,7 @@ func main() {
 	})
 
 	go func() {
-		log.Fatal(http.ListenAndServe(":"+strconv.Itoa(int(cfg.Port)), nil))
+		log.Fatal(httpServer.ListenAndServe())
 	}()
 
 	discord, dgerr := discordgo.New("Bot " + cfg.Token)
@@ -143,6 +172,19 @@ func main() {
 	<-sc
 	fmt.Println("\nClosing connection with Discord")
 	discord.Close()
+}
+
+func isLoopbackHost(hostport string) bool {
+	host, _, err := net.SplitHostPort(hostport)
+	if err != nil {
+		host = hostport
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func voiceStateUpdate(s *discordgo.Session, m *discordgo.VoiceStateUpdate) {
