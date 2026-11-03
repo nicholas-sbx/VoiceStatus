@@ -13,7 +13,7 @@
         "License": "GPL-3.0",
         "Name": "VoiceStatus",
         "Version": "2.0.0",
-        "Website": "https://github.com/pipipear/VoiceStatus"
+        "Website": "https://github.com/nicholas-sbx/VoiceStatus"
     },
     "X-Plasma-API-Minimum-Version": "6.0"
 }

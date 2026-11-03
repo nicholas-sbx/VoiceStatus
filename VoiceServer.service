@@ -1,6 +1,6 @@
 [Unit]
 Description=VoiceServer (Discord voice status for the VoiceStatus widget)
-Documentation=https://github.com/pipipear/VoiceStatus
+Documentation=https://github.com/nicholas-sbx/VoiceStatus
 
 [Service]
 ExecStart=%h/go/bin/VoiceServer

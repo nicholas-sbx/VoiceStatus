@@ -1,0 +1,56 @@
+# Publishes a GitHub release when a version tag (v2.0.0, ...) is pushed:
+# the .plasmoid package, VoiceServer binaries, checksums, and the matching
+# CHANGELOG.md section as release notes.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: VoiceServer/go.mod
+          cache-dependency-path: VoiceServer/go.sum
+
+      - name: Check versions match the tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          widget=$(jq -r .KPlugin.Version Plasmoid/metadata.json)
+          if [ "$widget" != "$version" ]; then
+            echo "::error::Plasmoid/metadata.json has Version $widget, tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+          if ! grep -q "^## $version " CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## $version' section"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Test VoiceServer
+        working-directory: VoiceServer
+        run: go test -race ./...
+
+      - name: Build
+        run: |
+          mkdir dist
+          (cd Plasmoid && zip -r "../dist/VoiceStatus-$VERSION.plasmoid" .)
+          for arch in amd64 arm64; do
+            (cd VoiceServer && CGO_ENABLED=0 GOOS=linux GOARCH=$arch \
+              go build -trimpath -ldflags="-s -w" -o "../dist/VoiceServer-linux-$arch" .)
+          done
+          (cd dist && sha256sum * > SHA256SUMS)
+          awk -v v="$VERSION" '/^## /{p = ($2 == v)} p' CHANGELOG.md | tail -n +2 > notes.md
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "VoiceStatus $VERSION" --notes-file notes.md --verify-tag
