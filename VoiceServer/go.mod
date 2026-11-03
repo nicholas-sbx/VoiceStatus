@@ -1,4 +1,4 @@
-module github.com/pipipear/VoiceStatus/VoiceServer
+module github.com/nicholas-sbx/VoiceStatus/VoiceServer
 
 go 1.25.0
 

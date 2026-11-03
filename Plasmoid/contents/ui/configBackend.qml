@@ -33,9 +33,9 @@ KCM.SimpleKCM {
 
         QQC2.Button {
             Kirigami.FormData.label: i18n("Server setup instructions:")
-            text: "github.com/pipipear/VoiceStatus"
+            text: "github.com/nicholas-sbx/VoiceStatus"
             icon.name: "internet-services"
-            onClicked: Qt.openUrlExternally("https://github.com/pipipear/VoiceStatus")
+            onClicked: Qt.openUrlExternally("https://github.com/nicholas-sbx/VoiceStatus")
         }
     }
 }

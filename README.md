@@ -15,8 +15,8 @@ Go 1.25 or newer is required.
 
 Then install the server and write its config file:
 ```bash
-go install -v github.com/pipipear/VoiceStatus/VoiceServer@latest
-wget github.com/pipipear/VoiceStatus/raw/main/VoiceServer.service -P ~/.config/systemd/user/
+go install -v github.com/nicholas-sbx/VoiceStatus/VoiceServer@latest
+wget github.com/nicholas-sbx/VoiceStatus/raw/main/VoiceServer.service -P ~/.config/systemd/user/
 nano ~/.config/VoiceStatus.json
 chmod 600 ~/.config/VoiceStatus.json # the file holds your bot token
 ```
