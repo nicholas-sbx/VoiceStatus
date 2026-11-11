@@ -22,7 +22,7 @@ jobs:
       - name: Install Qt rendering test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libegl1 libopengl0 libxcb-cursor0 libgl1-mesa-dri xvfb xauth
+          sudo apt-get install -y --no-install-recommends libegl1 libopengl0 libgl1-mesa-dri libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 xvfb xauth
           python3 -m venv .qml-tests
           .qml-tests/bin/python -m pip install PySide6-Essentials==6.8.2
 
