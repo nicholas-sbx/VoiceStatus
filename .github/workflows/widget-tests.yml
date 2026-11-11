@@ -30,11 +30,7 @@ jobs:
         run: xvfb-run -a .qml-tests/bin/python tests/test_avatar_rendering.py --output test-output/fixed
 
       - name: Verify the test catches the 2.0.0 scaling regression
-        run: |
-          if xvfb-run -a .qml-tests/bin/python tests/test_avatar_rendering.py --baseline --output test-output/baseline; then
-            echo "::error::The rendering test did not catch the 2.0.0 scaling regression"
-            exit 1
-          fi
+        run: xvfb-run -a .qml-tests/bin/python tests/test_avatar_rendering.py --baseline --output test-output/baseline
 
       - name: Save rendered avatars
         if: always()

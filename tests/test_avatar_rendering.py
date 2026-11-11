@@ -3,7 +3,7 @@
 Run with PySide6-Essentials 6.8.2 and an OpenGL-capable display, for example:
     xvfb-run -a python tests/test_avatar_rendering.py
 
-The baseline option renders the 2.0.0 image path and must fail these checks:
+The baseline option confirms that the 2.0.0 image path fails the quality checks:
     xvfb-run -a python tests/test_avatar_rendering.py --baseline
 """
 
@@ -148,7 +148,11 @@ Rectangle {{
                 if error > 1.0:
                     failures.append((scale, size, mipmap, error))
         view.close()
-        assert not failures, f"Avatar differs from a smooth resize: {failures}"
+        if args.baseline:
+            assert failures, "The test did not detect the 2.0.0 scaling regression"
+            print(f"Confirmed baseline regression in {len(failures)} cases", flush=True)
+        else:
+            assert not failures, f"Avatar differs from a smooth resize: {failures}"
 
 
 if __name__ == "__main__":
