@@ -16,7 +16,7 @@ import tempfile
 import time
 
 from PySide6.QtCore import QEventLoop, QObject, QPointF, QSize, Qt, QUrl
-from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPen
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QImageReader, QPainter, QPen
 from PySide6.QtQuick import QQuickView, QQuickWindow, QSGRendererInterface
 
 
@@ -63,14 +63,17 @@ def mean_error(a, b):
     return sum(abs(x - y) for x, y in pairs) / (a.width() * a.height() * 4)
 
 
-def reference(source, size):
+def reference(source_path, size):
+    # Match Qt's decode-and-resize path, including the PNG reader's alpha
+    # conversion. Resizing the pre-encoded QPainter image can differ at >50%.
+    reader = QImageReader(str(source_path))
+    reader.setScaledSize(size)
+    resized = reader.read()
+    assert not resized.isNull(), reader.errorString()
     target = QImage(size, QImage.Format.Format_ARGB32_Premultiplied)
     target.fill(BACKGROUND)
     painter = QPainter(target)
-    painter.drawImage(0, 0, source.scaled(
-        size, Qt.AspectRatioMode.IgnoreAspectRatio,
-        Qt.TransformationMode.SmoothTransformation,
-    ))
+    painter.drawImage(0, 0, resized)
     painter.end()
     return target
 
@@ -91,7 +94,7 @@ def worker(args):
     with tempfile.TemporaryDirectory() as directory:
         directory = Path(directory)
         source_path = directory / "avatar.png"
-        source = fixture(source_path)
+        fixture(source_path)
         component = "Image" if args.baseline else "VoiceStatus.AvatarImage"
         qml_path = directory / "render.qml"
         qml_path.write_text(f'''
@@ -136,7 +139,7 @@ Rectangle {{
                 assert not actual.isNull()
                 expected_size = QSize(round(size * scale), round(size * scale))
                 assert actual.size() == expected_size, (actual.size(), expected_size)
-                error = mean_error(actual, reference(source, actual.size()))
+                error = mean_error(actual, reference(source_path, actual.size()))
                 print(f"scale={scale:g} size={size} mipmap={mipmap} error={error:.3f}", flush=True)
                 if args.output:
                     output = Path(args.output)
