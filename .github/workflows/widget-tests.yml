@@ -1,0 +1,45 @@
+name: Widget rendering
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  avatars:
+    runs-on: ubuntu-24.04
+    env:
+      QT_QPA_PLATFORM: xcb
+      QSG_RHI_BACKEND: opengl
+      LIBGL_ALWAYS_SOFTWARE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Qt rendering test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libegl1 libopengl0 libxcb-cursor0 libgl1-mesa-dri xvfb xauth
+          python3 -m venv .qml-tests
+          .qml-tests/bin/python -m pip install PySide6-Essentials==6.8.2
+
+      - name: Render avatars at standard and HiDPI scales
+        run: xvfb-run -a .qml-tests/bin/python tests/test_avatar_rendering.py --output test-output/fixed
+
+      - name: Verify the test catches the 2.0.0 scaling regression
+        run: |
+          if xvfb-run -a .qml-tests/bin/python tests/test_avatar_rendering.py --baseline --output test-output/baseline; then
+            echo "::error::The rendering test did not catch the 2.0.0 scaling regression"
+            exit 1
+          fi
+
+      - name: Save rendered avatars
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: avatar-rendering
+          path: test-output
+          if-no-files-found: ignore

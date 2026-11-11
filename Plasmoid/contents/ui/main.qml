@@ -220,16 +220,13 @@ PlasmoidItem {
                     Repeater {
                         model: channel.modelData
 
-                        delegate: Image {
+                        delegate: AvatarImage {
                             id: avatar
                             required property var modelData
 
                             Layout.preferredWidth: root.avatarSize
                             Layout.preferredHeight: root.avatarSize
                             source: root.avatarUrl(modelData.avatar)
-                            fillMode: Image.PreserveAspectFit
-                            asynchronous: true
-                            smooth: true
                             mipmap: Plasmoid.configuration.avatarMipmap
 
                             Kirigami.Icon {
