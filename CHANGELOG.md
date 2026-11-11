@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.1 — 2026-11-10
+
+- Restore size-aware avatar loading so smooth scaling preserves detail instead of blurring small panel avatars.
+- Account for display scaling when choosing the loaded image size, including fractional and HiDPI displays.
+- Keep the existing mipmap preference; smooth filtering remains enabled with either setting.
+- Verify avatar rendering at 100%, 125%, 150%, and 200% display scaling before publishing releases.
+
 ## 2.0.0 — 2026-11-03
 
 **Requires Plasma 6.** Plasma 5 users should stay on 1.0.1.

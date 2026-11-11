@@ -47,8 +47,8 @@ sudo dnf install qt6-qtwebsockets          # Fedora
 ```
 Install the widget from [the KDE Store](https://www.pling.com/p/1735750/), or download `VoiceStatus-<version>.plasmoid` from the [latest release](https://github.com/nicholas-sbx/VoiceStatus/releases/latest):
 ```bash
-kpackagetool6 --type Plasma/Applet --install VoiceStatus-2.0.0.plasmoid  # first install
-kpackagetool6 --type Plasma/Applet --upgrade VoiceStatus-2.0.0.plasmoid  # update
+kpackagetool6 --type Plasma/Applet --install VoiceStatus-2.0.1.plasmoid  # first install
+kpackagetool6 --type Plasma/Applet --upgrade VoiceStatus-2.0.1.plasmoid  # update
 ```
 To install from a clone of this repository instead, pass the `Plasmoid` folder in place of the file.
 Add **VoiceStatus** to a panel, then set your server's ID in its settings. To copy the ID, turn on Developer Mode in Discord (Settings → Advanced), then right-click the server and choose **Copy Server ID**.
