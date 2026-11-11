@@ -1,20 +1,25 @@
-# Publishes a GitHub release when a version tag (v2.0.0, ...) is pushed:
-# the .plasmoid package, VoiceServer binaries, checksums, and the matching
-# CHANGELOG.md section as release notes.
-name: Release
+# One-time publisher for the prepared v2.0.0 release.
+# Build and tag the existing main commit, without changing the released source.
+name: Release v2.0.0
 
 on:
   push:
-    tags: ["v*"]
+    branches: ["release/v2.0.0"]
 
 permissions:
   contents: write
+
+env:
+  RELEASE_TAG: v2.0.0
+  RELEASE_COMMIT: ae46ac3be96a570348a81a9e91b6a138bc515911
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_COMMIT }}
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -23,16 +28,17 @@ jobs:
 
       - name: Check versions match the tag
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           widget=$(jq -r .KPlugin.Version Plasmoid/metadata.json)
           if [ "$widget" != "$version" ]; then
-            echo "::error::Plasmoid/metadata.json has Version $widget, tag is $GITHUB_REF_NAME"
+            echo "::error::Plasmoid/metadata.json has Version $widget, tag is $RELEASE_TAG"
             exit 1
           fi
           if ! grep -q "^## $version " CHANGELOG.md; then
             echo "::error::CHANGELOG.md has no '## $version' section"
             exit 1
           fi
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Test VoiceServer
@@ -53,4 +59,4 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --title "VoiceStatus $VERSION" --notes-file notes.md --verify-tag
+        run: gh release create "$RELEASE_TAG" dist/* --title "VoiceStatus $VERSION" --notes-file notes.md --target "$RELEASE_COMMIT"
