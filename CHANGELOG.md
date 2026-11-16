@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.2 — 2026-11-16
+
+- Remove the redundant “Smooth scaling (mipmap)” checkbox and its unused setting. Avatars automatically retain smooth, size-aware scaling.
+
 ## 2.0.1 — 2026-11-10
 
 - Restore size-aware avatar loading so smooth scaling preserves detail instead of blurring small panel avatars.
