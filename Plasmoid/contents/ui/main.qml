@@ -227,7 +227,6 @@ PlasmoidItem {
                             Layout.preferredWidth: root.avatarSize
                             Layout.preferredHeight: root.avatarSize
                             source: root.avatarUrl(modelData.avatar)
-                            mipmap: Plasmoid.configuration.avatarMipmap
 
                             Kirigami.Icon {
                                 anchors.fill: parent

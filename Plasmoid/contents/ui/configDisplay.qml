@@ -15,7 +15,6 @@ KCM.SimpleKCM {
     property alias cfg_sortStyleOverlay:        sortStyleOverlay.checked
     property alias cfg_userSpacing:             userSpacing.value
     property alias cfg_channelSpacing:          channelSpacing.value
-    property alias cfg_avatarMipmap:            avatarMipmap.checked
 
     Kirigami.FormLayout {
         QQC2.TextField {
@@ -110,16 +109,6 @@ KCM.SimpleKCM {
             to: 99
             textFromValue: (value, locale) => i18nc("@item:valuesuffix pixels", "%1 px", value)
             valueFromText: (text, locale) => parseInt(text.replace(/\D/g, ""), 10) || 0
-        }
-
-        Item {
-            Kirigami.FormData.isSection: true
-        }
-
-        QQC2.CheckBox {
-            id: avatarMipmap
-            Kirigami.FormData.label: i18n("Avatars:")
-            text: i18n("Smooth scaling (mipmap)")
         }
     }
 }

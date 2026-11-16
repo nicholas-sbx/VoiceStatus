@@ -32,9 +32,6 @@
     <entry name="channelSpacing" type="Int">
       <default>8</default>
     </entry>
-    <entry name="avatarMipmap" type="Bool">
-      <default>true</default>
-    </entry>
   </group>
 
   <group name="Backend">
