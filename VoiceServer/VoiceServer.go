@@ -366,8 +366,15 @@ func loadConfig() (Config, error) {
 	}
 	defer f.Close()
 
-	if fi, err := f.Stat(); err == nil && fi.Mode().Perm()&0o077 != 0 {
-		log.Printf("warning: %s contains your bot token but is readable by other users; run: chmod 600 %q", path, path)
+	fi, err := f.Stat()
+	if err != nil {
+		return Config{}, err
+	}
+	if !fi.Mode().IsRegular() {
+		return Config{}, fmt.Errorf("%s must be a regular file", path)
+	}
+	if fi.Mode().Perm()&0o077 != 0 {
+		return Config{}, fmt.Errorf("bot token config must be private to its owner; run chmod 600 %q", path)
 	}
 
 	var cfg Config

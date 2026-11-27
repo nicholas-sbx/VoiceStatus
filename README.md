@@ -22,8 +22,14 @@ install -Dm755 VoiceServer-linux-amd64 ~/go/bin/VoiceServer
 Set up the service and write the config file:
 ```bash
 wget https://raw.githubusercontent.com/nicholas-sbx/VoiceStatus/v2.0.3/VoiceServer.service -P ~/.config/systemd/user/
-nano ~/.config/VoiceStatus.json
-chmod 600 ~/.config/VoiceStatus.json # the file holds your bot token
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}"
+(
+  umask 077
+  mkdir -p -- "$config_dir" &&
+    touch -- "$config_dir/VoiceStatus.json" &&
+    chmod 600 -- "$config_dir/VoiceStatus.json" &&
+    nano -- "$config_dir/VoiceStatus.json"
+)
 ```
 Add the following to the config file. Use a **bot** token; user tokens ("self-bots") are against Discord's Terms of Service and don't work.
 ```json
