@@ -11,7 +11,7 @@ It has two parts:
 2. Under **Bot → Privileged Gateway Intents**, enable **Server Members Intent**. Nicknames and avatars come from it.
 3. Invite the bot to your server. Under OAuth2 → URL Generator, select the `bot` scope and the **View Channels** permission.
 
-Then install the server, either with Go 1.25 or newer:
+Then install the server with a current, patched Go toolchain:
 ```bash
 go install github.com/nicholas-sbx/VoiceStatus/VoiceServer@latest
 ```
@@ -21,7 +21,7 @@ install -Dm755 VoiceServer-linux-amd64 ~/go/bin/VoiceServer
 ```
 Set up the service and write the config file:
 ```bash
-wget github.com/nicholas-sbx/VoiceStatus/raw/main/VoiceServer.service -P ~/.config/systemd/user/
+wget https://raw.githubusercontent.com/nicholas-sbx/VoiceStatus/v2.0.3/VoiceServer.service -P ~/.config/systemd/user/
 nano ~/.config/VoiceStatus.json
 chmod 600 ~/.config/VoiceStatus.json # the file holds your bot token
 ```
@@ -47,8 +47,8 @@ sudo dnf install qt6-qtwebsockets          # Fedora
 ```
 Install the widget from [the KDE Store](https://www.pling.com/p/1735750/), or download `VoiceStatus-<version>.plasmoid` from the [latest release](https://github.com/nicholas-sbx/VoiceStatus/releases/latest):
 ```bash
-kpackagetool6 --type Plasma/Applet --install VoiceStatus-2.0.2.plasmoid  # first install
-kpackagetool6 --type Plasma/Applet --upgrade VoiceStatus-2.0.2.plasmoid  # update
+kpackagetool6 --type Plasma/Applet --install VoiceStatus-2.0.3.plasmoid  # first install
+kpackagetool6 --type Plasma/Applet --upgrade VoiceStatus-2.0.3.plasmoid  # update
 ```
 To install from a clone of this repository instead, pass the `Plasmoid` folder in place of the file.
 Add **VoiceStatus** to a panel, then set your server's ID in its settings. To copy the ID, turn on Developer Mode in Discord (Settings → Advanced), then right-click the server and choose **Copy Server ID**.

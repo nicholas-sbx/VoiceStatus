@@ -22,7 +22,8 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: VoiceServer/go.mod
+          go-version: '1.27.x'
+          check-latest: true
           cache-dependency-path: VoiceServer/go.sum
 
       - name: Check versions match the tag
@@ -43,13 +44,26 @@ jobs:
         working-directory: VoiceServer
         run: go test -race ./...
 
+      - name: Scan VoiceServer for known vulnerabilities
+        working-directory: VoiceServer
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.10.0
+          for arch in amd64 arm64; do
+            GOARCH=$arch govulncheck ./...
+          done
+
       - name: Build
         run: |
           mkdir dist
           (cd Plasmoid && zip -r "../dist/VoiceStatus-$VERSION.plasmoid" .)
           for arch in amd64 arm64; do
+            # Keep Go symbols so the scanner can identify the functions in each binary.
             (cd VoiceServer && CGO_ENABLED=0 GOOS=linux GOARCH=$arch \
-              go build -trimpath -ldflags="-s -w" -o "../dist/VoiceServer-linux-$arch" .)
+              go build -trimpath -ldflags="-w" -o "../dist/VoiceServer-linux-$arch" .)
+            govulncheck -mode=binary "dist/VoiceServer-linux-$arch"
           done
           (cd dist && sha256sum * > SHA256SUMS)
           awk -v v="$VERSION" '/^## /{p = ($2 == v)} p' CHANGELOG.md | tail -n +2 > notes.md

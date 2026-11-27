@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.3 — 2026-11-26
+
+- The setup instructions now download the systemd user service over HTTPS from the matching release tag.
+- Rebuild the Linux VoiceServer binaries with a patched Go 1.27 toolchain. Release builds select the latest 1.27 patch and check both target architectures for known vulnerabilities before publishing.
+- Update Gorilla WebSocket to the upstream fix for predictable client frame masking keys (GO-2026-6278).
+
 ## 2.0.2 — 2026-11-16
 
 - Remove the redundant “Smooth scaling (mipmap)” checkbox and its unused setting. Avatars automatically retain smooth, size-aware scaling.
