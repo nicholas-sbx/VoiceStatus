@@ -60,8 +60,10 @@ jobs:
           mkdir dist
           (cd Plasmoid && zip -r "../dist/VoiceStatus-$VERSION.plasmoid" .)
           for arch in amd64 arm64; do
+            # Keep Go symbols so the scanner can identify the functions in each binary.
             (cd VoiceServer && CGO_ENABLED=0 GOOS=linux GOARCH=$arch \
-              go build -trimpath -ldflags="-s -w" -o "../dist/VoiceServer-linux-$arch" .)
+              go build -trimpath -ldflags="-w" -o "../dist/VoiceServer-linux-$arch" .)
+            govulncheck -mode=binary "dist/VoiceServer-linux-$arch"
           done
           (cd dist && sha256sum * > SHA256SUMS)
           awk -v v="$VERSION" '/^## /{p = ($2 == v)} p' CHANGELOG.md | tail -n +2 > notes.md
