@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
-import QtWebSockets // not installed by default, see README
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasmoid
@@ -15,7 +14,7 @@ PlasmoidItem {
     readonly property bool editMode: Plasmoid.containment?.corona?.editMode ?? false
 
     readonly property string serverId: Plasmoid.configuration.serverId.trim()
-    readonly property bool connected: socket.status === WebSocket.Open
+    readonly property bool connected: connection.authenticated
     property string discordStatus: "disconnected"
 
     // Last data received from VoiceServer: guild ID -> { channel ID -> [user] }
@@ -129,10 +128,9 @@ PlasmoidItem {
         return result;
     }
 
-    function handleMessage(message) {
-        let info, parsed;
+    function handleMessage(info) {
+        let parsed;
         try {
-            info = JSON.parse(message);
             // voiceChannels is itself JSON encoded, or null before Discord is ready.
             parsed = typeof info.voiceChannels === "string" ? JSON.parse(info.voiceChannels) : info.voiceChannels;
         } catch (e) {
@@ -148,29 +146,17 @@ PlasmoidItem {
         return typeof url === "string" && url.startsWith("https://cdn.discordapp.com/") ? url : "";
     }
 
-    WebSocket {
-        id: socket
-        url: `ws://127.0.0.1:${Plasmoid.configuration.localhostPort}/ws`
-        active: true
-
-        onTextMessageReceived: message => root.handleMessage(message)
-        onStatusChanged: status => {
-            if (status === WebSocket.Error) {
-                console.warn("VoiceStatus: websocket error:", socket.errorString);
-            }
-            if (status === WebSocket.Error || status === WebSocket.Closed) {
+    PresenceConnection {
+        id: connection
+        port: Plasmoid.configuration.localhostPort
+        reconnectDelay: Plasmoid.configuration.reconnectDelay
+        onSnapshot: info => root.handleMessage(info)
+        onAuthenticatedChanged: {
+            if (!authenticated) {
                 root.servers = null;
                 root.discordStatus = "disconnected";
-                socket.active = false;
-                reconnectTimer.restart();
             }
         }
-    }
-
-    Timer {
-        id: reconnectTimer
-        interval: Plasmoid.configuration.reconnectDelay * 1000
-        onTriggered: socket.active = true
     }
 
     // Only the popup host (CompactApplet) draws the PlasmoidItem tooltip, and

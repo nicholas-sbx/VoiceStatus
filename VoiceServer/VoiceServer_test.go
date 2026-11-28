@@ -78,13 +78,21 @@ func TestFlexibleInt(t *testing.T) {
 }
 
 func TestWebSocketAccess(t *testing.T) {
-	srv := newServer()
+	srv := newServer(sessionKeys{client: "client-key", server: "server-key"})
 	ts := httptest.NewServer(srv)
 	defer ts.Close()
 	url := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	// The widget: no Origin header, loopback Host.
-	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	for _, protocols := range [][]string{nil, {"voicestatus.wrong"}, {"voicestatus.server-key"}} {
+		dialer := websocket.Dialer{Subprotocols: protocols}
+		_, resp, err := dialer.Dial(url, nil)
+		if err == nil || resp == nil || resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("unauthorized client was not rejected: %v", err)
+		}
+		resp.Body.Close()
+	}
+	dialer := websocket.Dialer{Subprotocols: []string{"voicestatus.client-key"}}
+	conn, _, err := dialer.Dial(url, nil)
 	if err != nil {
 		t.Fatalf("widget connection rejected: %v", err)
 	}
@@ -93,12 +101,12 @@ func TestWebSocketAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(msg) != `{"discordAPI":"disconnected","voiceChannels":null}` {
+	if conn.Subprotocol() != "voicestatus.client-key" || string(msg) != `{"discordAPI":"disconnected","voiceChannels":null,"serverProof":"server-key"}` {
 		t.Fatalf("unexpected initial message %s", msg)
 	}
 
 	// A web page: browsers always send an Origin header.
-	_, resp, err := websocket.DefaultDialer.Dial(url, http.Header{"Origin": {"http://evil.example"}})
+	_, resp, err := dialer.Dial(url, http.Header{"Origin": {"http://evil.example"}})
 	if err == nil || resp == nil || resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("browser origin should be rejected, got err=%v resp=%v", err, resp)
 	}
@@ -106,6 +114,7 @@ func TestWebSocketAccess(t *testing.T) {
 	// DNS rebinding: non-loopback Host header.
 	req, _ := http.NewRequest("GET", ts.URL+"/ws", nil)
 	req.Host = "evil.example:5462"
+	req.Header.Set("Sec-WebSocket-Protocol", "voicestatus.client-key")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
