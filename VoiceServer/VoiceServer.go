@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -118,10 +119,12 @@ func (o orderedChannels) MarshalJSON() ([]byte, error) {
 type info struct {
 	DiscordAPI    string  `json:"discordAPI"`
 	VoiceChannels *string `json:"voiceChannels"`
+	ServerProof   string  `json:"serverProof"`
 }
 
 type server struct {
-	ws *melody.Melody
+	ws             *melody.Melody
+	clientProtocol string
 
 	mu      sync.Mutex
 	state   info
@@ -131,8 +134,10 @@ type server struct {
 	updatePending bool
 }
 
-func newServer() *server {
-	srv := &server{ws: melody.New()}
+func newServer(keys sessionKeys) *server {
+	srv := &server{ws: melody.New(), clientProtocol: "voicestatus." + keys.client}
+	srv.state.ServerProof = keys.server
+	srv.ws.Upgrader.Subprotocols = []string{srv.clientProtocol}
 	// Browsers always send an Origin header with WebSocket handshakes, while
 	// the widget (Qt) does not. Rejecting any Origin stops web pages from
 	// reading the voice data through the user's browser.
@@ -175,6 +180,10 @@ func (srv *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Guard against DNS rebinding: a malicious site resolving its own
 	// domain to 127.0.0.1 would otherwise pass the same-host checks.
 	if !isLoopbackHost(r.Host) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(r.Header.Get("Sec-WebSocket-Protocol")), []byte(srv.clientProtocol)) != 1 {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -395,18 +404,22 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
-	srv := newServer()
-
+	addr := net.JoinHostPort(listenHost, strconv.Itoa(int(cfg.Port)))
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("listen: %v", err)
+	}
+	keys, err := publishSessionKeys(int(cfg.Port))
+	if err != nil {
+		log.Fatalf("session credentials: %v", err)
+	}
+	srv := newServer(keys)
 	mux := http.NewServeMux()
 	mux.Handle("/ws", srv)
 	httpServer := &http.Server{
-		Addr:              net.JoinHostPort(listenHost, strconv.Itoa(int(cfg.Port))),
+		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
-	}
-	listener, err := net.Listen("tcp", httpServer.Addr)
-	if err != nil {
-		log.Fatalf("listen: %v", err)
 	}
 	go func() {
 		if err := httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {

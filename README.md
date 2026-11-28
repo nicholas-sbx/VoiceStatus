@@ -2,7 +2,7 @@
 A KDE Plasma 6 widget that shows the users in your Discord server's voice channels, for horizontal and vertical panels.
 
 It has two parts:
-- **VoiceServer**, a small background service that logs in to Discord with a bot account and serves voice channel data on `127.0.0.1` only.
+- **VoiceServer**, a small background service that logs in to Discord with a bot account and shares voice channel data with widgets running under your Linux account.
 - **The Plasmoid**, the panel widget that connects to VoiceServer and shows each occupied channel's users as avatars.
 
 # Installation
@@ -37,6 +37,8 @@ Start the server:
 systemctl enable --now --user VoiceServer.service
 ```
 Check it with `journalctl --user -u VoiceServer.service`.
+
+VoiceServer and the widget authenticate each other over the loopback WebSocket using fresh keys stored in your private `$XDG_RUNTIME_DIR` at startup. The Discord bot token stays with VoiceServer. When upgrading from an unauthenticated version, update **both** the server binary and widget, then restart VoiceServer with `systemctl --user restart VoiceServer.service`.
 
 ## Plasmoid
 The widget needs Plasma 6 and the Qt 6 WebSockets QML module, for example:
